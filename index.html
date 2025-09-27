@@ -327,6 +327,21 @@
             }
         });
 
+        // In your DOMContentLoaded event listener, add:
+        let loadTimeout = setTimeout(() => {
+            if (!pdfViewer.contentDocument || pdfViewer.contentDocument.readyState !== 'complete') {
+                showToast('Taking too long to load. Starting download...', 3000);
+                downloadPdf();
+            }
+        }, 10000); // 10 seconds
+
+        // Add this to your existing PDF load event to clear the timeout if PDF loads successfully
+        pdfViewer.addEventListener('load', () => {
+            clearTimeout(loadTimeout);
+            hideLoading();
+            showToast('PDF loaded successfully', 2000);
+        });
+
         // Add event listeners for search
         searchBtn.addEventListener('click', performSearch);
         searchInput.addEventListener('keypress', (e) => {
@@ -351,10 +366,12 @@
             // Hide loading bar after content is loaded
             setTimeout(() => {
                 hideLoading();
-            }, 500);
-            
+            }, 30000);
+
             // Show keyboard shortcut hint
             showToast('If the PDF takes too long to load, press the download button or wait for it to load', 900000);            
+
+           
         });
         
         // Handle keyboard shortcuts
@@ -383,25 +400,36 @@
         downloadBtn.addEventListener('click', downloadPdf);
         
         function downloadPdf() {
+            // Prevent multiple download attempts
+            if (window.downloadInProgress) return;
+            window.downloadInProgress = true;
+            
             showLoading();
+            showToast('Starting download...', 2000);
             
             const link = document.createElement('a');
             link.href = 'THE RECORD.pdf';
             link.download = 'THE RECORD.pdf';
             document.body.appendChild(link);
             
-            // Show toast when download starts
-            showToast('Downloading PDF...');
-            
-            // Simulate download delay
+            // Small delay to ensure toast is visible
             setTimeout(() => {
                 link.click();
                 document.body.removeChild(link);
                 hideLoading();
                 showToast('Download started!', 2000);
+                window.downloadInProgress = false;
             }, 500);
         }
         
+
+        pdfViewer.addEventListener('error', () => {
+            clearTimeout(loadTimeout);
+            hideLoading();
+            showToast('Error loading PDF. Starting download...', 3000);
+            downloadPdf();
+        });
+
         // Show loading state when PDF is loading
         pdfViewer.addEventListener('loadstart', showLoading);
         pdfViewer.addEventListener('load', hideLoading);
