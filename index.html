@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Viewer</title>
+    <style>
+        :root {
+            --primary-color: #4a6cf7;
+            --primary-hover: #3a5ce4;
+            --bg-color: #1e293b;
+            --text-color: #e2e8f0;
+            --text-muted: #94a3b8;
+            --border-color: #334155;
+            --card-bg: #1e293b;
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            --transition: all 0.2s ease;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+        }
+        
+        #app {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            position: relative;
+        }
+        
+        /* Toolbar */
+        #toolbar {
+            background-color: var(--card-bg);
+            padding: 12px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: var(--shadow-md);
+            z-index: 10;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .toolbar-title {
+            font-size: 1.1em;
+            font-weight: 600;
+            color: var(--text-color);
+        }
+        
+        .toolbar-hint {
+            font-size: 0.9em;
+            color: var(--text-muted);
+            background: rgba(255, 255, 255, 0.05);
+            padding: 4px 12px;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        .toolbar-hint kbd {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 2px 6px;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+            font-family: monospace;
+            font-size: 0.9em;
+            line-height: 1;
+        }
+
+        /* Search Box */
+        .search-container {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        #search-input {
+            padding: 6px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            background-color: var(--card-bg);
+            color: var(--text-color);
+            width: 200px;
+            transition: var(--transition);
+        }
+
+        #search-input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px rgba(74, 108, 247, 0.2);
+        }
+
+        .search-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            transition: var(--transition);
+        }
+
+        .search-btn:hover {
+            color: var(--primary-color);
+            background: rgba(74, 108, 247, 0.1);
+        }
+
+        /* Hide search box on desktop by default */
+        @media (min-width: 769px) {
+            .search-container {
+                display: none;
+            }
+        }
+
+        /* Show search box on mobile */
+        @media (max-width: 768px) {
+            .toolbar-hint {
+                display: none;
+            }
+            
+            .search-container {
+                display: flex;
+            }
+        }
+        
+        /* PDF Container */
+        #pdf-container {
+            position: relative;
+            width: 100%;
+            flex: 1;
+            background-color: #4a5568;
+            overflow: hidden;
+        }
+        
+        #pdf-viewer {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+        
+        /* Download Button */
+        #download-btn {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            z-index: 30;
+            background-color: var(--primary-color);
+            color: white;
+            width: 56px;
+            height: 56px;
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: var(--transition);
+        }
+        
+        #download-btn:hover {
+            background-color: var(--primary-hover);
+            transform: translateY(-2px) scale(1.05);
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+        }
+        
+        #download-btn:active {
+            transform: translateY(0) scale(0.98);
+        }
+        
+        /* Loading State */
+        .loading {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--primary-color), #60a5fa, var(--primary-color));
+            background-size: 200% 100%;
+            animation: loading 1.5s infinite;
+            z-index: 20;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        
+        .loading.active {
+            opacity: 1;
+        }
+        
+        @keyframes loading {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+        
+        /* Toast Notification */
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            z-index: 1000;
+            opacity: 0;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .toast.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <!-- Loading Bar -->
+        <div class="loading" id="loading-bar"></div>
+        
+        <!-- Toolbar -->
+        <div id="toolbar">
+            <div class="toolbar-title">Revert's ClassRoom (Mapping Islamic Knowledge)</div>
+            <div class="toolbar-hint">
+                Press <kbd>Ctrl</kbd> + <kbd>F</kbd> to search
+            </div>
+        </div>
+
+        <!-- Add this search container right after the toolbar-hint div -->
+        <div class="search-container">
+            <input type="text" id="search-input" placeholder="Search in PDF...">
+            <button class="search-btn" id="search-btn" title="Search">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+            </button>
+        </div>
+        
+        <!-- PDF Container -->
+        <div id="pdf-container">
+            <iframe id="pdf-viewer" src="THE RECORD.pdf#toolbar=0&navpanes=0"></iframe>
+        </div>
+        
+        <!-- Download Button -->
+        <button id="download-btn" title="Download PDF">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+        </button>
+        
+        <!-- Toast Notification -->
+        <div class="toast" id="toast"></div>
+    </div>
+    
+    <script>
+        // DOM elements
+        const downloadBtn = document.getElementById('download-btn');
+        const pdfViewer = document.getElementById('pdf-viewer');
+        const loadingBar = document.getElementById('loading-bar');
+        const toast = document.getElementById('toast');
+        
+        // Show toast notification
+        function showToast(message, duration = 3000) {
+            toast.textContent = message;
+            toast.classList.add('show');
+            
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, duration);
+        }
+        
+        // Check if device is mobile
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        const searchInput = document.getElementById('search-input');
+        const searchBtn = document.getElementById('search-btn');
+
+        // Handle search functionality
+        function performSearch() {
+            const searchTerm = searchInput.value.trim();
+            if (searchTerm) {
+                // Focus the PDF viewer and use browser's find functionality
+                pdfViewer.focus();
+                try {
+                    const result = window.find(searchTerm);
+                    if (!result) {
+                        showToast('No results found');
+                    }
+                } catch (e) {
+                    showToast('Search not supported in this browser');
+                }
+            }
+        }
+
+        // Update the DOMContentLoaded event listener to show appropriate message
+        document.addEventListener('DOMContentLoaded', () => {
+            // Hide loading bar after content is loaded
+            setTimeout(() => {
+                hideLoading();
+            }, 500);
+            
+            // Show appropriate help message based on device
+            if (isMobile) {
+                showToast('Tap the search icon to search in the PDF', 3000);
+            } else {
+                showToast('Press Ctrl+F to search in the PDF', 3000);
+            }
+        });
+
+        // Add event listeners for search
+        searchBtn.addEventListener('click', performSearch);
+        searchInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                performSearch();
+            }
+        });
+
+
+        // Show loading state
+        function showLoading() {
+            loadingBar.classList.add('active');
+        }
+        
+        // Hide loading state
+        function hideLoading() {
+            loadingBar.classList.remove('active');
+        }
+        
+        // Initialize the app
+        document.addEventListener('DOMContentLoaded', () => {
+            // Hide loading bar after content is loaded
+            setTimeout(() => {
+                hideLoading();
+            }, 500);
+            
+            // Show keyboard shortcut hint
+            showToast('Press Ctrl+F to search in the PDF', 3000);
+        });
+        
+        // Handle keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            // Show search with Ctrl+F
+            if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+                e.preventDefault();
+                // Focus the PDF viewer to allow browser's find to work
+                pdfViewer.focus();
+                // Show help message
+                showToast('Use your browser\'s find (Ctrl+F) to search in the PDF');
+            }
+            // Show help with ?
+            else if (e.key === '?') {
+                e.preventDefault();
+                showToast('Keyboard shortcuts: Ctrl+F (Search), D (Download)', 3000);
+            }
+            // Quick download with D key
+            else if (e.key === 'd' || e.key === 'D') {
+                e.preventDefault();
+                downloadPdf();
+            }
+        });
+        
+        // Download button functionality
+        downloadBtn.addEventListener('click', downloadPdf);
+        
+        function downloadPdf() {
+            showLoading();
+            
+            const link = document.createElement('a');
+            link.href = 'THE RECORD.pdf';
+            link.download = 'THE RECORD.pdf';
+            document.body.appendChild(link);
+            
+            // Show toast when download starts
+            showToast('Downloading PDF...');
+            
+            // Simulate download delay
+            setTimeout(() => {
+                link.click();
+                document.body.removeChild(link);
+                hideLoading();
+                showToast('Download started!', 2000);
+            }, 500);
+        }
+        
+        // Show loading state when PDF is loading
+        pdfViewer.addEventListener('loadstart', showLoading);
+        pdfViewer.addEventListener('load', hideLoading);
+        pdfViewer.addEventListener('error', () => {
+            hideLoading();
+            showToast('Error loading PDF', 3000);
+        });
+    </script>
+</body>
+</html>
